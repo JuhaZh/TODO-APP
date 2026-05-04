@@ -1,0 +1,1438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#fdf2f8">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>待办清单</title>
+<style>
+/* ============================================
+   Design Tokens
+   ============================================ */
+:root {
+  /* Pastel palette */
+  --pink-50: #fdf2f8;
+  --pink-100: #fce7f3;
+  --pink-200: #fbcfe8;
+  --pink-400: #f472b6;
+  --pink-500: #ec4899;
+  --pink-600: #db2777;
+  --pink-700: #be185d;
+
+  --lavender-50: #eef2ff;
+  --lavender-100: #e0e7ff;
+  --lavender-200: #c7d2fe;
+
+  --blue-50: #f0f9ff;
+  --blue-100: #e0f2fe;
+  --green-50: #f0fdf4;
+
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+
+  --rose-500: #ef4444;
+  --rose-50: #fef2f2;
+
+  /* Semantic tokens */
+  --color-bg: #fff;
+  --color-text-primary: var(--slate-800);
+  --color-text-secondary: var(--slate-500);
+  --color-text-tertiary: var(--slate-400);
+  --color-text-muted: var(--slate-300);
+  --color-border: var(--slate-200);
+  --color-border-light: var(--slate-100);
+
+  --color-accent: var(--pink-500);
+  --color-accent-hover: var(--pink-600);
+  --color-accent-light: var(--pink-100);
+
+  --color-danger: var(--rose-500);
+  --color-danger-bg: var(--rose-50);
+
+  --color-important: #f59e0b;
+  --color-important-bg: #fffbeb;
+
+  --color-completed-text: var(--slate-400);
+  --color-completed-bg: var(--slate-50);
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 20px 60px rgba(236, 72, 153, 0.08), 0 20px 60px rgba(0, 0, 0, 0.10);
+  --shadow-button: 0 4px 14px rgba(236, 72, 153, 0.30);
+  --shadow-button-hover: 0 6px 20px rgba(236, 72, 153, 0.40);
+  --shadow-task: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-task-hover: 0 4px 12px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Transitions */
+  --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 350ms;
+}
+
+/* ============================================
+   Base & Reset
+   ============================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #fdf2f8 0%, #e0f2fe 50%, #f0fdf4 100%);
+  background-attachment: fixed;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 48px 16px;
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ============================================
+   Container
+   ============================================ */
+.container {
+  width: 100%;
+  max-width: 500px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+/* ============================================
+   Header
+   ============================================ */
+.header {
+  background: linear-gradient(135deg, rgba(252, 231, 243, 0.9) 0%, rgba(224, 231, 255, 0.9) 50%, rgba(240, 253, 244, 0.7) 100%);
+  padding: 28px 28px 22px;
+  position: relative;
+  overflow: hidden;
+}
+
+.header::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -30%;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.08) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.header h1 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--pink-700);
+  line-height: 1.3;
+  position: relative;
+}
+
+.header p {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+  font-weight: 400;
+  position: relative;
+}
+
+/* ============================================
+   Input Section
+   ============================================ */
+.input-section {
+  display: flex;
+  gap: 10px;
+  padding: 18px 24px 16px;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.input-wrapper {
+  flex: 1;
+  position: relative;
+}
+
+.input-wrapper input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  color: var(--color-text-primary);
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+  background: var(--slate-50);
+  font-family: inherit;
+}
+
+.input-wrapper input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.12);
+  background: #fff;
+}
+
+.input-wrapper input::placeholder {
+  color: var(--color-text-tertiary);
+  font-weight: 400;
+}
+
+.btn-add {
+  padding: 12px 22px;
+  background: linear-gradient(135deg, var(--pink-500), var(--pink-600));
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out),
+              opacity var(--duration-fast) var(--ease-out);
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+  box-shadow: var(--shadow-button);
+  position: relative;
+  overflow: hidden;
+  font-family: inherit;
+}
+
+.btn-add:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-button-hover);
+}
+
+.btn-add:active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: var(--shadow-button);
+}
+
+.btn-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Ripple effect container */
+.btn-add::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.btn-add:hover::after {
+  opacity: 1;
+}
+
+/* ============================================
+   Task List Area
+   ============================================ */
+.task-list-wrapper {
+  max-height: 420px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+.task-list-wrapper::-webkit-scrollbar {
+  width: 5px;
+}
+
+.task-list-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.task-list-wrapper::-webkit-scrollbar-thumb {
+  background: var(--slate-200);
+  border-radius: var(--radius-full);
+}
+
+.task-list-wrapper::-webkit-scrollbar-thumb:hover {
+  background: var(--slate-300);
+}
+
+.task-list {
+  list-style: none;
+  padding: 6px 16px;
+  min-height: 60px;
+  overflow-x: hidden;
+}
+
+/* ============================================
+   Task Item
+   ============================================ */
+.task-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin: 4px 0;
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-task);
+  transition: opacity var(--duration-base) var(--ease-out),
+              transform var(--duration-base) var(--ease-out),
+              box-shadow var(--duration-base) var(--ease-out),
+              border-color var(--duration-base) var(--ease-out);
+  position: relative;
+}
+
+.task-list li:hover {
+  box-shadow: var(--shadow-task-hover);
+  border-color: var(--color-border-light);
+}
+
+/* Entry animation */
+@keyframes taskSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.task-list li.task-enter {
+  animation: taskSlideIn 0.35s var(--ease-bounce) forwards;
+}
+
+/* Completed state */
+.task-list li.completed {
+  background: var(--color-completed-bg);
+  border-color: var(--color-border-light);
+}
+
+.task-list li.completed:hover {
+  border-color: var(--color-border);
+}
+
+/* ============================================
+   Checkbox
+   ============================================ */
+.checkbox {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--slate-300);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-base) var(--ease-out);
+  background: transparent;
+  position: relative;
+}
+
+.checkbox:hover {
+  border-color: var(--color-accent);
+  background: var(--pink-50);
+  transform: scale(1.05);
+}
+
+.checkbox:active {
+  transform: scale(0.92);
+}
+
+.checkbox svg {
+  width: 13px;
+  height: 13px;
+}
+
+.checkbox svg polyline {
+  stroke-dasharray: 18;
+  stroke-dashoffset: 18;
+  transition: stroke-dashoffset var(--duration-base) var(--ease-out);
+}
+
+li.completed .checkbox {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+li.completed .checkbox:hover {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
+
+li.completed .checkbox svg polyline {
+  stroke-dashoffset: 0;
+}
+
+/* ============================================
+   Task Content
+   ============================================ */
+.task-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-text {
+  font-size: 15px;
+  color: var(--color-text-primary);
+  word-break: break-word;
+  line-height: 1.5;
+  transition: color var(--duration-base) var(--ease-out);
+  position: relative;
+}
+
+li.completed .task-text {
+  color: var(--color-completed-text);
+}
+
+li.completed .task-text::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: 1.5px;
+  background: var(--slate-300);
+  border-radius: 1px;
+  transform: translateY(-50%);
+  animation: strikeThrough 0.35s var(--ease-out) forwards;
+}
+
+@keyframes strikeThrough {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+.task-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+
+.task-time {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  font-weight: 400;
+  letter-spacing: 0.2px;
+}
+
+/* ============================================
+   Badge - Important
+   ============================================ */
+.badge-important {
+  font-size: 10px;
+  font-weight: 600;
+  color: #d97706;
+  background: var(--color-important-bg);
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  border: 1px solid rgba(245, 158, 11, 0.15);
+  line-height: 1.6;
+}
+
+/* ============================================
+   Buttons - Important & Delete
+   ============================================ */
+.btn-important {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast) var(--ease-out);
+  color: var(--slate-300);
+  padding: 0;
+}
+
+.btn-important:hover {
+  color: var(--color-important);
+  background: var(--color-important-bg);
+  transform: scale(1.1);
+}
+
+.btn-important:active {
+  transform: scale(0.92);
+}
+
+.btn-important.active {
+  color: var(--color-important);
+}
+
+.btn-important.active:hover {
+  color: #d97706;
+  background: var(--color-important-bg);
+}
+
+.btn-delete {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--slate-300);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast) var(--ease-out);
+  font-size: 16px;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.task-list li:hover .btn-delete,
+.task-list li:focus-within .btn-delete,
+.btn-delete:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.btn-delete:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  transform: scale(1.1);
+}
+
+.btn-delete:active {
+  transform: scale(0.92);
+}
+
+/* ============================================
+   Empty State
+   ============================================ */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 32px 48px;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  user-select: none;
+}
+
+.empty-state-illustration {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-state-illustration svg {
+  width: 80px;
+  height: 80px;
+  opacity: 0.35;
+  animation: float 4s var(--ease-bounce) infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.empty-state h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 6px;
+}
+
+.empty-state p {
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+  max-width: 220px;
+  line-height: 1.5;
+}
+
+/* ============================================
+   Footer
+   ============================================ */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  border-top: 1px solid var(--color-border-light);
+  background: var(--slate-50);
+  gap: 16px;
+  transition: all var(--duration-base) var(--ease-out);
+}
+
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.footer-left .count-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--pink-100);
+  color: var(--pink-600);
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.footer-left .count-label {
+  color: var(--color-text-tertiary);
+}
+
+.footer-right {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-footer {
+  padding: 6px 14px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--duration-fast) var(--ease-out);
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.btn-footer:hover {
+  border-color: var(--slate-300);
+  background: var(--slate-100);
+  color: var(--color-text-primary);
+}
+
+.btn-footer:active {
+  transform: scale(0.97);
+}
+
+.btn-footer-danger {
+  color: var(--color-danger);
+  border-color: transparent;
+  background: transparent;
+}
+
+.btn-footer-danger:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.btn-footer:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ============================================
+   Focus Visible (Accessibility)
+   ============================================ */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.btn-add:focus-visible,
+.btn-footer:focus-visible,
+.btn-important:focus-visible,
+.btn-delete:focus-visible {
+  outline-offset: 1px;
+}
+
+.checkbox:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+/* ============================================
+   Responsive
+   ============================================ */
+@media (max-width: 640px) {
+  body {
+    padding: 24px 12px;
+  }
+
+  .container {
+    border-radius: var(--radius-md);
+  }
+}
+
+@media (max-width: 540px) {
+  body {
+    padding: 0;
+  }
+
+  .container {
+    max-width: 100%;
+    border-radius: 0;
+    border: none;
+    min-height: 100vh;
+    background: rgba(255, 255, 255, 0.92);
+  }
+
+  .header {
+    padding: 24px 20px 18px;
+  }
+
+  .header h1 {
+    font-size: 22px;
+  }
+
+  .input-section {
+    padding: 16px 16px 14px;
+    gap: 8px;
+  }
+
+  .input-wrapper input {
+    padding: 11px 14px;
+    font-size: 16px; /* Prevent iOS zoom */
+  }
+
+  .btn-add {
+    padding: 11px 18px;
+    font-size: 14px;
+  }
+
+  .task-list {
+    padding: 6px 12px;
+  }
+
+  .task-list li {
+    padding: 10px 12px;
+    gap: 10px;
+    margin: 3px 0;
+  }
+
+  .task-text {
+    font-size: 14px;
+  }
+
+  .footer {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .footer-right {
+    flex: 1;
+    justify-content: flex-end;
+  }
+
+  .btn-footer {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .empty-state {
+    padding: 48px 24px 40px;
+  }
+}
+
+@media (max-width: 380px) {
+  .footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .footer-right {
+    justify-content: stretch;
+  }
+
+  .btn-footer {
+    flex: 1;
+    text-align: center;
+  }
+
+  .input-section {
+    flex-direction: column;
+  }
+
+  .btn-add {
+    width: 100%;
+  }
+}
+
+/* ============================================
+   Motion Sensitivity
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .empty-state-illustration svg {
+    animation: none;
+  }
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div class="container" role="main">
+  <!-- Header -->
+  <div class="header">
+    <h1>待办清单</h1>
+    <p>让每一天都井井有条</p>
+  </div>
+
+  <!-- Input -->
+  <div class="input-section">
+    <div class="input-wrapper">
+      <input type="text" id="taskInput" placeholder="添加新任务..." maxlength="200" autocomplete="off" aria-label="新任务内容">
+    </div>
+    <button class="btn-add" id="btnAdd" aria-label="添加任务">添加</button>
+  </div>
+
+  <!-- Task List -->
+  <div class="task-list-wrapper">
+    <ul class="task-list" id="taskList" aria-label="任务列表" role="list"></ul>
+  </div>
+
+  <!-- Empty State -->
+  <div class="empty-state" id="emptyState" aria-live="polite">
+    <div class="empty-state-illustration">
+      <svg aria-hidden="true" viewBox="0 0 80 80" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="10" y="16" width="60" height="52" rx="6" opacity="0.3"/>
+        <rect x="16" y="22" width="48" height="40" rx="4"/>
+        <line x1="28" y1="34" x2="52" y2="34" opacity="0.4"/>
+        <line x1="28" y1="42" x2="48" y2="42" opacity="0.4"/>
+        <line x1="28" y1="50" x2="44" y2="50" opacity="0.4"/>
+        <path d="M58 14l4 4-4 4" opacity="0.5"/>
+        <path d="M58 14l-4 4 4 4" opacity="0.5"/>
+        <circle cx="62" cy="50" r="8" opacity="0.7"/>
+        <path d="M60 50l1.5 1.5 3-3" stroke-width="2" opacity="0.7"/>
+      </svg>
+    </div>
+    <h2 id="emptyTitle">开始记录吧</h2>
+    <p id="emptyDesc">添加你的第一项任务，<br>让每一天都井井有条</p>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer" id="footer" style="display:none;" aria-live="polite">
+    <div class="footer-left">
+      <span class="count-number" id="countNumber">0</span>
+      <span class="count-label" id="countLabel">项待完成</span>
+    </div>
+    <div class="footer-right">
+      <button class="btn-footer" id="btnClearCompleted" aria-label="清除所有已完成任务">清除已完成</button>
+      <button class="btn-footer btn-footer-danger" id="btnDeleteAll" aria-label="删除全部任务">全部删除</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================
+   Supabase Config — replace with your own project values
+   ============================================ */
+const SUPABASE_URL = 'https://qijmoaehjahcvaxvyraj.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_GQ95k1iJrVCnTiTd0dJYKQ_puZQM-QX';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* ============================================
+   State
+   ============================================ */
+let tasks = [];
+
+/* ============================================
+   DOM References
+   ============================================ */
+const container = document.querySelector('.container');
+const taskInput = document.getElementById('taskInput');
+const btnAdd = document.getElementById('btnAdd');
+const taskList = document.getElementById('taskList');
+const emptyState = document.getElementById('emptyState');
+const emptyTitle = document.getElementById('emptyTitle');
+const emptyDesc = document.getElementById('emptyDesc');
+const footer = document.getElementById('footer');
+const countNumber = document.getElementById('countNumber');
+const countLabel = document.getElementById('countLabel');
+const btnClearCompleted = document.getElementById('btnClearCompleted');
+const btnDeleteAll = document.getElementById('btnDeleteAll');
+
+/* ============================================
+   Container Transition Coordinator
+   Prevents conflicting height transitions between
+   smoothHeightChange and deleteTask by tracking
+   and canceling pending listeners.
+   ============================================ */
+let _smoothH = null;
+let _deleteC = null;
+
+function _cancelContainerTransitions() {
+  if (_smoothH) {
+    container.removeEventListener('transitionend', _smoothH);
+    _smoothH = null;
+  }
+  if (_deleteC) {
+    container.removeEventListener('transitionend', _deleteC);
+    _deleteC = null;
+  }
+}
+
+/* ============================================
+   Persistence — Supabase
+   ============================================ */
+async function sync() {
+  const { data, error } = await db.from('tasks').select('*').order('created_at', { ascending: true });
+  if (error) { console.error('同步失败:', error.message); return; }
+  tasks = (data || []).map(t => ({ ...t, createdAt: t.created_at }));
+  render();
+}
+
+async function migrateLocalData() {
+  const raw = localStorage.getItem('tasks');
+  if (!raw) return;
+  const local = JSON.parse(raw);
+  if (!local.length) { localStorage.removeItem('tasks'); return; }
+  const { error } = await db.from('tasks').upsert(
+    local.map(t => ({ id: t.id, text: t.text, completed: t.completed, important: t.important, created_at: t.createdAt }))
+  );
+  if (error) {
+    console.error('迁移失败，旧数据保留在浏览器中:', error);
+  } else {
+    localStorage.removeItem('tasks');
+    await sync();
+  }
+}
+
+function netErr(e, ctx) {
+  console.error(ctx || '操作失败', e);
+  alert((ctx || '操作失败') + '：' + (e.message || e));
+}
+
+/* ============================================
+   Time Formatting
+   ============================================ */
+function formatTime(ts) {
+  const seconds = Math.floor((Date.now() - ts) / 1000);
+  if (seconds < 60) return '刚刚';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} 天前`;
+  const d = new Date(ts);
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${month}月${day}日 ${hh}:${mm}`;
+}
+
+/* ============================================
+   DOM Element Creation
+   ============================================ */
+function createTaskElement(task) {
+  const li = document.createElement('li');
+  li.dataset.id = task.id;
+
+  if (task.completed) li.classList.add('completed');
+
+  // --- Checkbox ---
+  const checkbox = document.createElement('div');
+  checkbox.className = 'checkbox';
+  checkbox.setAttribute('role', 'checkbox');
+  checkbox.setAttribute('aria-checked', task.completed ? 'true' : 'false');
+  checkbox.setAttribute('tabindex', '0');
+  checkbox.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  checkbox.addEventListener('click', () => toggleCompleted(task.id));
+  checkbox.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggleCompleted(task.id);
+    }
+  });
+
+  // --- Task Content ---
+  const taskContent = document.createElement('div');
+  taskContent.className = 'task-content';
+
+  const taskText = document.createElement('div');
+  taskText.className = 'task-text';
+  taskText.textContent = task.text;
+
+  const taskMeta = document.createElement('div');
+  taskMeta.className = 'task-meta';
+
+  const timeDiv = document.createElement('div');
+  timeDiv.className = 'task-time';
+  timeDiv.textContent = formatTime(task.createdAt);
+  taskMeta.appendChild(timeDiv);
+
+  if (task.important) {
+    const badge = document.createElement('span');
+    badge.className = 'badge-important';
+    badge.textContent = '重要';
+    taskMeta.appendChild(badge);
+  }
+
+  taskContent.append(taskText, taskMeta);
+
+  // --- Important Button ---
+  const btnImportant = document.createElement('button');
+  btnImportant.className = 'btn-important' + (task.important ? ' active' : '');
+  btnImportant.setAttribute('aria-label', task.important ? '取消重要标记' : '标记为重要');
+  btnImportant.innerHTML = task.important
+    ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>'
+    : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
+  btnImportant.addEventListener('click', () => toggleImportant(task.id));
+
+  // --- Delete Button ---
+  const btnDelete = document.createElement('button');
+  btnDelete.className = 'btn-delete';
+  btnDelete.setAttribute('aria-label', '删除任务');
+  btnDelete.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  btnDelete.addEventListener('click', () => deleteTask(task.id));
+
+  li.append(checkbox, taskContent, btnImportant, btnDelete);
+  return li;
+}
+
+/* ============================================
+   Smooth Container Height Transition
+   ============================================ */
+function smoothHeightChange(mutate) {
+  // Cancel any conflicting transitions before starting
+  _cancelContainerTransitions();
+
+  const oldHeight = container.offsetHeight;
+  container.style.height = oldHeight + 'px';
+  container.style.transition = 'none';
+  container.offsetHeight; // commit lock
+
+  mutate();
+
+  // scrollHeight read forces layout with new DOM — no rAF gap
+  const newHeight = container.scrollHeight;
+  container.style.transition = 'height 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+  container.style.height = newHeight + 'px';
+
+  const handler = function handler() {
+    _smoothH = null;
+    container.style.height = '';
+    container.style.transition = '';
+  };
+  _smoothH = handler;
+  container.addEventListener('transitionend', handler, { once: true });
+}
+
+/* ============================================
+   Append Task to DOM (with animation)
+   ============================================ */
+function appendTaskToDOM(task) {
+  const li = createTaskElement(task);
+  li.classList.add('task-enter');
+  taskList.appendChild(li);
+  updateEmptyState();
+  updateFooter();
+  scrollToBottom();
+
+  li.addEventListener('animationend', function handler() {
+    li.classList.remove('task-enter');
+    li.removeEventListener('animationend', handler);
+  }, { once: true });
+}
+
+function scrollToBottom() {
+  const wrapper = taskList.closest('.task-list-wrapper');
+  if (wrapper) {
+    wrapper.scrollTop = wrapper.scrollHeight;
+  }
+}
+
+/* ============================================
+   Core Operations (Selective DOM Updates)
+   ============================================ */
+
+// --- Add Task ---
+async function addTask(text) {
+  text = text.trim();
+  if (!text) return;
+
+  const task = {
+    id: Date.now(),
+    text,
+    completed: false,
+    createdAt: Date.now(),
+    important: false
+  };
+
+  tasks.push(task);
+  smoothHeightChange(() => {
+    appendTaskToDOM(task);
+  });
+  taskInput.value = '';
+  taskInput.focus();
+
+  const { error } = await db.from('tasks').insert({
+    id: task.id, text: task.text, completed: task.completed,
+    important: task.important, created_at: task.createdAt
+  });
+  if (error) {
+    tasks = tasks.filter(t => t.id !== task.id);
+    const li = taskList.querySelector(`[data-id="${task.id}"]`);
+    if (li) li.remove();
+    updateEmptyState();
+    updateFooter();
+    netErr(error, '添加失败');
+  }
+}
+
+// --- Toggle Completed ---
+async function toggleCompleted(id) {
+  const task = tasks.find(t => t.id === id);
+  if (!task) return;
+
+  const prev = task.completed;
+  task.completed = !task.completed;
+
+  const li = taskList.querySelector(`[data-id="${id}"]`);
+  if (li) {
+    li.classList.toggle('completed');
+    const checkbox = li.querySelector('.checkbox');
+    if (checkbox) {
+      checkbox.setAttribute('aria-checked', task.completed ? 'true' : 'false');
+    }
+  }
+
+  updateFooter();
+
+  const { error } = await db.from('tasks').update({ completed: task.completed }).eq('id', id);
+  if (error) {
+    task.completed = prev;
+    if (li) {
+      li.classList.toggle('completed');
+      const checkbox = li.querySelector('.checkbox');
+      if (checkbox) checkbox.setAttribute('aria-checked', prev ? 'true' : 'false');
+    }
+    updateFooter();
+    netErr(error, '更新失败');
+  }
+}
+
+// --- Toggle Important ---
+async function toggleImportant(id) {
+  const task = tasks.find(t => t.id === id);
+  if (!task) return;
+
+  const prev = task.important;
+  task.important = !task.important;
+
+  const li = taskList.querySelector(`[data-id="${id}"]`);
+  if (!li) { task.important = prev; return; }
+
+  const btn = li.querySelector('.btn-important');
+  const starFilled = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
+  const starOutline = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
+  if (btn) {
+    btn.classList.toggle('active');
+    btn.setAttribute('aria-label', task.important ? '取消重要标记' : '标记为重要');
+    btn.innerHTML = task.important ? starFilled : starOutline;
+  }
+
+  const meta = li.querySelector('.task-meta');
+  const existingBadge = meta ? meta.querySelector('.badge-important') : null;
+  if (task.important && meta && !existingBadge) {
+    const badge = document.createElement('span');
+    badge.className = 'badge-important';
+    badge.textContent = '重要';
+    meta.appendChild(badge);
+  } else if (!task.important && existingBadge) {
+    existingBadge.remove();
+  }
+
+  const { error } = await db.from('tasks').update({ important: task.important }).eq('id', id);
+  if (error) {
+    task.important = prev;
+    if (li) {
+      if (btn) {
+        btn.classList.toggle('active');
+        btn.setAttribute('aria-label', prev ? '取消重要标记' : '标记为重要');
+        btn.innerHTML = prev ? starFilled : starOutline;
+      }
+      const badge = meta ? meta.querySelector('.badge-important') : null;
+      if (prev && meta && !badge) {
+        const b = document.createElement('span');
+        b.className = 'badge-important';
+        b.textContent = '重要';
+        meta.appendChild(b);
+      } else if (!prev && badge) {
+        badge.remove();
+      }
+    }
+    netErr(error, '更新失败');
+  }
+}
+
+// --- Delete Task (dual-track: GPU collapse + container shrink) ---
+async function deleteTask(id) {
+  const li = taskList.querySelector(`[data-id="${id}"]`);
+  if (!li) return;
+  if (li.dataset._deleting) return;
+  li.dataset._deleting = 'true';
+
+  const idx = tasks.findIndex(t => t.id === id);
+  if (idx === -1) return;
+  const removed = tasks.splice(idx, 1)[0];
+
+  const { error: delErr } = await db.from('tasks').delete().eq('id', id);
+  if (delErr) {
+    tasks.splice(idx, 0, removed);
+    delete li.dataset._deleting;
+    netErr(delErr, '删除失败');
+    return;
+  }
+
+  // Cancel any pending container transitions (e.g. from addTask)
+  _cancelContainerTransitions();
+
+  // Measure the VISIBLE height reduction once the li is removed from layout.
+  // This correctly accounts for the task-list-wrapper's max-height (420px):
+  // if the wrapper is already scrolled, removing one li may not change the
+  // container's visible height at all, avoiding an overshoot-and-snap-back.
+  const oldH = container.offsetHeight;
+  li.style.display = 'none';
+  const newH = container.offsetHeight;
+  li.style.display = '';
+  const gap = oldH - newH;
+
+  // Lock container to its current visible height so the subsequent
+  // transition from current height -> target height is smooth.
+  container.style.height = oldH + 'px';
+  container.style.transition = 'none';
+  container.offsetHeight;
+
+  // Li: GPU-only visual collapse — both properties at 0.25s to match container
+  li.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+  li.style.transformOrigin = 'top';
+  li.style.transform = 'scaleY(0)';
+  li.style.opacity = '0';
+  li.style.pointerEvents = 'none';
+
+  // Container: parallel smooth shrink
+  container.style.transition = 'height 0.25s ease-out';
+  container.style.height = (oldH - gap) + 'px';
+
+  let cleaned = false;
+  function cleanup() {
+    if (cleaned) return;
+    cleaned = true;
+    // Clean up all our listeners
+    li.removeEventListener('transitionend', onLiEnd);
+    if (_deleteC === onContainerEnd) {
+      container.removeEventListener('transitionend', onContainerEnd);
+      _deleteC = null;
+    }
+    // Only remove li if it's still in the DOM
+    if (li.parentNode) li.remove();
+    // Only reset container styles if no smoothHeightChange is active
+    if (!_smoothH) {
+      container.style.height = '';
+      container.style.transition = '';
+    }
+    updateEmptyState();
+    updateFooter();
+  }
+
+  function onLiEnd(e) {
+    // Only react to 'transform' completion so cleanup runs after
+    // the visual collapse, not after the opacity fades.
+    if (e.propertyName !== 'transform') return;
+    li.removeEventListener('transitionend', onLiEnd);
+    cleanup();
+  }
+
+  function onContainerEnd() {
+    cleanup();
+  }
+
+  _deleteC = onContainerEnd;
+  li.addEventListener('transitionend', onLiEnd);
+  container.addEventListener('transitionend', onContainerEnd);
+}
+
+// --- Clear Completed (bulk, uses re-render) ---
+async function clearCompleted() {
+  if (!tasks.some(t => t.completed)) return;
+  const removed = tasks.filter(t => t.completed);
+  const ids = removed.map(t => t.id);
+  tasks = tasks.filter(t => !t.completed);
+  smoothHeightChange(() => { render(); });
+  const { error: clrErr } = await db.from('tasks').delete().in('id', ids);
+  if (clrErr) {
+    tasks.push(...removed);
+    render();
+    netErr(clrErr, '清除失败');
+  }
+}
+
+// --- Delete All (bulk, uses re-render) ---
+async function deleteAll() {
+  if (tasks.length === 0) return;
+  if (!confirm('确定要删除所有任务吗？此操作不可恢复。')) return;
+  const snapshot = [...tasks];
+  tasks = [];
+  smoothHeightChange(() => { render(); });
+  const { error: allErr } = await db.from('tasks').delete().neq('id', 0);
+  if (allErr) {
+    tasks = snapshot;
+    render();
+    netErr(allErr, '全部删除失败');
+  }
+}
+
+/* ============================================
+   UI State Updates
+   ============================================ */
+function updateEmptyState() {
+  if (tasks.length === 0) {
+    emptyState.style.display = 'flex';
+    emptyTitle.textContent = '开始记录吧';
+    emptyDesc.innerHTML = '添加你的第一项任务，<br>让每一天都井井有条';
+  } else {
+    emptyState.style.display = 'none';
+  }
+}
+
+function updateFooter() {
+  if (tasks.length === 0) {
+    footer.style.display = 'none';
+    return;
+  }
+
+  footer.style.display = 'flex';
+  const remaining = tasks.filter(t => !t.completed).length;
+  const hasCompleted = tasks.some(t => t.completed);
+
+  if (remaining === 0) {
+    countNumber.textContent = '✓';
+    countLabel.textContent = '全部完成';
+    countNumber.style.background = '#d1fae5';
+    countNumber.style.color = '#059669';
+  } else {
+    countNumber.textContent = remaining;
+    countLabel.textContent = '项待完成';
+    countNumber.style.background = '';
+    countNumber.style.color = '';
+  }
+
+  btnClearCompleted.disabled = !hasCompleted;
+}
+
+/* ============================================
+   Full Render (initial load & bulk ops)
+   ============================================ */
+function render() {
+  taskList.innerHTML = '';
+  tasks.forEach((task, i) => {
+    const li = createTaskElement(task);
+    li.classList.add('task-enter');
+    li.style.animationDelay = `${i * 0.05}s`;
+    li.addEventListener('animationend', function handler() {
+      li.classList.remove('task-enter');
+      li.removeEventListener('animationend', handler);
+    }, { once: true });
+    taskList.appendChild(li);
+  });
+  updateEmptyState();
+  updateFooter();
+}
+
+/* ============================================
+   Event Binding
+   ============================================ */
+btnAdd.addEventListener('click', () => addTask(taskInput.value));
+
+taskInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') addTask(taskInput.value);
+});
+
+btnClearCompleted.addEventListener('click', clearCompleted);
+btnDeleteAll.addEventListener('click', deleteAll);
+
+/* ============================================
+   Init
+   ============================================ */
+(async function init() {
+  await sync();
+  await migrateLocalData();
+})();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js');
+}
+</script>
+</body>
+</html>
