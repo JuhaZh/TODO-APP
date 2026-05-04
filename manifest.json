@@ -2,7 +2,7 @@
   "name": "待办清单",
   "short_name": "待办",
   "description": "让每一天都井井有条",
-  "start_url": "/index.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "orientation": "any",
   "theme_color": "#fdf2f8",
