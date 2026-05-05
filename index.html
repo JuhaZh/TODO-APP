@@ -1319,7 +1319,7 @@ async function clearCompleted() {
   const removed = tasks.filter(t => t.completed);
   const ids = removed.map(t => t.id);
   tasks = tasks.filter(t => !t.completed);
-  smoothHeightChange(() => { render(); });
+  smoothHeightChange(() => { render(false); });
   const { error: clrErr } = await db.from('tasks').delete().in('id', ids);
   if (clrErr) {
     tasks.push(...removed);
@@ -1388,17 +1388,18 @@ function updateFooter() {
 /* ============================================
    Full Render (initial load & bulk ops)
    ============================================ */
-function render() {
+function render(animate = true) {
   taskList.innerHTML = '';
   tasks.forEach((task, i) => {
     const li = createTaskElement(task);
-    li.classList.add('task-enter');
-    li.style.animationDelay = `${Math.min(i, 20) * (ANIM_STAGGER_MS / 1000)}s`;
-    onTaskEnterEnd(li);
+    if (animate) {
+      li.classList.add('task-enter');
+      li.style.animationDelay = `${Math.min(i, 20) * (ANIM_STAGGER_MS / 1000)}s`;
+      onTaskEnterEnd(li);
+    }
     taskList.appendChild(li);
   });
-  updateEmptyState();
-  updateFooter();
+  updateUI();
 }
 
 /* ============================================
