@@ -8,6 +8,7 @@
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
 <title>待办清单</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://qijmoaehjahcvaxvyraj.supabase.co; img-src 'self' data:; font-src 'self'; manifest-src 'self';">
 <style>
 /* ============================================
    Design Tokens
@@ -306,6 +307,8 @@ body {
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
+  content-visibility: auto;
+  contain-intrinsic-size: 60px;
   margin: 4px 0;
   border-radius: var(--radius-md);
   background: var(--color-bg);
@@ -834,7 +837,7 @@ li.completed .task-text::after {
   }
 }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -904,6 +907,20 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let tasks = [];
 
 /* ============================================
+   Constants
+   ============================================ */
+const STAR_FILLED = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
+const STAR_OUTLINE = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
+const CHECK_SVG = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const DELETE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+const ANIM_DURATION_SMOOTH = '0.3s';
+const ANIM_DURATION_COLLAPSE = '0.25s';
+const ANIM_EASE_SMOOTH = 'cubic-bezier(0.4, 0, 0.2, 1)';
+const ANIM_EASE_COLLAPSE = 'ease-out';
+const ANIM_STAGGER_MS = 50;
+const TASK_MAX_LENGTH = 200;
+
+/* ============================================
    DOM References
    ============================================ */
 const container = document.querySelector('.container');
@@ -925,17 +942,17 @@ const btnDeleteAll = document.getElementById('btnDeleteAll');
    smoothHeightChange and deleteTask by tracking
    and canceling pending listeners.
    ============================================ */
-let _smoothH = null;
-let _deleteC = null;
+let _onSmoothEnd = null;
+let _onDeleteEnd = null;
 
 function _cancelContainerTransitions() {
-  if (_smoothH) {
-    container.removeEventListener('transitionend', _smoothH);
-    _smoothH = null;
+  if (_onSmoothEnd) {
+    container.removeEventListener('transitionend', _onSmoothEnd);
+    _onSmoothEnd = null;
   }
-  if (_deleteC) {
-    container.removeEventListener('transitionend', _deleteC);
-    _deleteC = null;
+  if (_onDeleteEnd) {
+    container.removeEventListener('transitionend', _onDeleteEnd);
+    _onDeleteEnd = null;
   }
 }
 
@@ -965,9 +982,9 @@ async function migrateLocalData() {
   }
 }
 
-function netErr(e, ctx) {
+function handleError(e, ctx) {
   console.error(ctx || '操作失败', e);
-  alert((ctx || '操作失败') + '：' + (e.message || e));
+  alert('操作失败，请稍后重试');
 }
 
 /* ============================================
@@ -1005,7 +1022,7 @@ function createTaskElement(task) {
   checkbox.setAttribute('role', 'checkbox');
   checkbox.setAttribute('aria-checked', task.completed ? 'true' : 'false');
   checkbox.setAttribute('tabindex', '0');
-  checkbox.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  checkbox.innerHTML = CHECK_SVG;
   checkbox.addEventListener('click', () => toggleCompleted(task.id));
   checkbox.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -1043,16 +1060,14 @@ function createTaskElement(task) {
   const btnImportant = document.createElement('button');
   btnImportant.className = 'btn-important' + (task.important ? ' active' : '');
   btnImportant.setAttribute('aria-label', task.important ? '取消重要标记' : '标记为重要');
-  btnImportant.innerHTML = task.important
-    ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>'
-    : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
+  btnImportant.innerHTML = task.important ? STAR_FILLED : STAR_OUTLINE;
   btnImportant.addEventListener('click', () => toggleImportant(task.id));
 
   // --- Delete Button ---
   const btnDelete = document.createElement('button');
   btnDelete.className = 'btn-delete';
   btnDelete.setAttribute('aria-label', '删除任务');
-  btnDelete.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  btnDelete.innerHTML = DELETE_SVG;
   btnDelete.addEventListener('click', () => deleteTask(task.id));
 
   li.append(checkbox, taskContent, btnImportant, btnDelete);
@@ -1075,33 +1090,36 @@ function smoothHeightChange(mutate) {
 
   // scrollHeight read forces layout with new DOM — no rAF gap
   const newHeight = container.scrollHeight;
-  container.style.transition = 'height 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+  container.style.transition = `height ${ANIM_DURATION_SMOOTH} ${ANIM_EASE_SMOOTH}`;
   container.style.height = newHeight + 'px';
 
   const handler = function handler() {
-    _smoothH = null;
+    _onSmoothEnd = null;
     container.style.height = '';
     container.style.transition = '';
   };
-  _smoothH = handler;
+  _onSmoothEnd = handler;
   container.addEventListener('transitionend', handler, { once: true });
 }
 
 /* ============================================
    Append Task to DOM (with animation)
    ============================================ */
-function appendTaskToDOM(task) {
-  const li = createTaskElement(task);
-  li.classList.add('task-enter');
-  taskList.appendChild(li);
-  updateEmptyState();
-  updateFooter();
-  scrollToBottom();
-
+function onTaskEnterEnd(li) {
   li.addEventListener('animationend', function handler() {
     li.classList.remove('task-enter');
     li.removeEventListener('animationend', handler);
   }, { once: true });
+}
+
+function appendTaskToDOM(task) {
+  const li = createTaskElement(task);
+  li.classList.add('task-enter');
+  taskList.appendChild(li);
+  updateUI();
+  scrollToBottom();
+
+  onTaskEnterEnd(li);
 }
 
 function scrollToBottom() {
@@ -1117,11 +1135,12 @@ function scrollToBottom() {
 
 // --- Add Task ---
 async function addTask(text) {
-  text = text.trim();
+  text = text.trim().replace(/[\u200B-\u200D\uFEFF\u2060]/g, '');
   if (!text) return;
+  if (text.length > TASK_MAX_LENGTH) { handleError(null, '任务内容不能超过200个字符'); return; }
 
   const task = {
-    id: Date.now(),
+    id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
     text,
     completed: false,
     createdAt: Date.now(),
@@ -1143,9 +1162,8 @@ async function addTask(text) {
     tasks = tasks.filter(t => t.id !== task.id);
     const li = taskList.querySelector(`[data-id="${task.id}"]`);
     if (li) li.remove();
-    updateEmptyState();
-    updateFooter();
-    netErr(error, '添加失败');
+    updateUI();
+    handleError(error, '添加失败');
   }
 }
 
@@ -1177,7 +1195,7 @@ async function toggleCompleted(id) {
       if (checkbox) checkbox.setAttribute('aria-checked', prev ? 'true' : 'false');
     }
     updateFooter();
-    netErr(error, '更新失败');
+    handleError(error, '更新失败');
   }
 }
 
@@ -1193,12 +1211,10 @@ async function toggleImportant(id) {
   if (!li) { task.important = prev; return; }
 
   const btn = li.querySelector('.btn-important');
-  const starFilled = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
-  const starOutline = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
   if (btn) {
     btn.classList.toggle('active');
     btn.setAttribute('aria-label', task.important ? '取消重要标记' : '标记为重要');
-    btn.innerHTML = task.important ? starFilled : starOutline;
+    btn.innerHTML = task.important ? STAR_FILLED : STAR_OUTLINE;
   }
 
   const meta = li.querySelector('.task-meta');
@@ -1219,7 +1235,7 @@ async function toggleImportant(id) {
       if (btn) {
         btn.classList.toggle('active');
         btn.setAttribute('aria-label', prev ? '取消重要标记' : '标记为重要');
-        btn.innerHTML = prev ? starFilled : starOutline;
+        btn.innerHTML = prev ? STAR_FILLED : STAR_OUTLINE;
       }
       const badge = meta ? meta.querySelector('.badge-important') : null;
       if (prev && meta && !badge) {
@@ -1231,7 +1247,7 @@ async function toggleImportant(id) {
         badge.remove();
       }
     }
-    netErr(error, '更新失败');
+    handleError(error, '更新失败');
   }
 }
 
@@ -1246,26 +1262,21 @@ async function deleteTask(id) {
   if (idx === -1) return;
   const removed = tasks.splice(idx, 1)[0];
 
-  const { error: delErr } = await db.from('tasks').delete().eq('id', id);
-  if (delErr) {
-    tasks.splice(idx, 0, removed);
-    delete li.dataset._deleting;
-    netErr(delErr, '删除失败');
-    return;
-  }
-
-  // Cancel any pending container transitions (e.g. from addTask)
+  // Start animation immediately (optimistic)
   _cancelContainerTransitions();
 
-  // Measure the VISIBLE height reduction once the li is removed from layout.
-  // This correctly accounts for the task-list-wrapper's max-height (420px):
-  // if the wrapper is already scrolled, removing one li may not change the
-  // container's visible height at all, avoiding an overshoot-and-snap-back.
   const oldH = container.offsetHeight;
-  li.style.display = 'none';
-  const newH = container.offsetHeight;
-  li.style.display = '';
-  const gap = oldH - newH;
+  const liBounds = li.getBoundingClientRect();
+  const gap = Math.min(liBounds.height, oldH);
+
+  // Fire Supabase delete in background — rollback on failure
+  db.from('tasks').delete().eq('id', id).then(({ error: delErr }) => {
+    if (delErr) {
+      tasks.splice(idx, 0, removed);
+      delete li.dataset._deleting;
+      handleError(delErr, '删除失败');
+    }
+  });
 
   // Lock container to its current visible height so the subsequent
   // transition from current height -> target height is smooth.
@@ -1274,14 +1285,14 @@ async function deleteTask(id) {
   container.offsetHeight;
 
   // Li: GPU-only visual collapse — both properties at 0.25s to match container
-  li.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+  li.style.transition = `transform ${ANIM_DURATION_COLLAPSE} ${ANIM_EASE_COLLAPSE}, opacity ${ANIM_DURATION_COLLAPSE} ${ANIM_EASE_COLLAPSE}`;
   li.style.transformOrigin = 'top';
   li.style.transform = 'scaleY(0)';
   li.style.opacity = '0';
   li.style.pointerEvents = 'none';
 
   // Container: parallel smooth shrink
-  container.style.transition = 'height 0.25s ease-out';
+  container.style.transition = `height ${ANIM_DURATION_COLLAPSE} ${ANIM_EASE_COLLAPSE}`;
   container.style.height = (oldH - gap) + 'px';
 
   let cleaned = false;
@@ -1290,19 +1301,18 @@ async function deleteTask(id) {
     cleaned = true;
     // Clean up all our listeners
     li.removeEventListener('transitionend', onLiEnd);
-    if (_deleteC === onContainerEnd) {
+    if (_onDeleteEnd === onContainerEnd) {
       container.removeEventListener('transitionend', onContainerEnd);
-      _deleteC = null;
+      _onDeleteEnd = null;
     }
     // Only remove li if it's still in the DOM
     if (li.parentNode) li.remove();
     // Only reset container styles if no smoothHeightChange is active
-    if (!_smoothH) {
+    if (!_onSmoothEnd) {
       container.style.height = '';
       container.style.transition = '';
     }
-    updateEmptyState();
-    updateFooter();
+    updateUI();
   }
 
   function onLiEnd(e) {
@@ -1317,7 +1327,7 @@ async function deleteTask(id) {
     cleanup();
   }
 
-  _deleteC = onContainerEnd;
+  _onDeleteEnd = onContainerEnd;
   li.addEventListener('transitionend', onLiEnd);
   container.addEventListener('transitionend', onContainerEnd);
 }
@@ -1333,7 +1343,7 @@ async function clearCompleted() {
   if (clrErr) {
     tasks.push(...removed);
     render();
-    netErr(clrErr, '清除失败');
+    handleError(clrErr, '清除失败');
   }
 }
 
@@ -1341,6 +1351,7 @@ async function clearCompleted() {
 async function deleteAll() {
   if (tasks.length === 0) return;
   if (!confirm('确定要删除所有任务吗？此操作不可恢复。')) return;
+  if (prompt('请输入 DELETE 确认：') !== 'DELETE') return;
   const snapshot = [...tasks];
   tasks = [];
   smoothHeightChange(() => { render(); });
@@ -1348,13 +1359,15 @@ async function deleteAll() {
   if (allErr) {
     tasks = snapshot;
     render();
-    netErr(allErr, '全部删除失败');
+    handleError(allErr, '全部删除失败');
   }
 }
 
 /* ============================================
    UI State Updates
    ============================================ */
+function updateUI() { updateEmptyState(); updateFooter(); }
+
 function updateEmptyState() {
   if (tasks.length === 0) {
     emptyState.style.display = 'flex';
@@ -1372,8 +1385,9 @@ function updateFooter() {
   }
 
   footer.style.display = 'flex';
-  const remaining = tasks.filter(t => !t.completed).length;
-  const hasCompleted = tasks.some(t => t.completed);
+  let remaining = 0;
+  for (const t of tasks) { if (!t.completed) remaining++; }
+  const hasCompleted = remaining < tasks.length;
 
   if (remaining === 0) {
     countNumber.textContent = '✓';
@@ -1398,11 +1412,8 @@ function render() {
   tasks.forEach((task, i) => {
     const li = createTaskElement(task);
     li.classList.add('task-enter');
-    li.style.animationDelay = `${i * 0.05}s`;
-    li.addEventListener('animationend', function handler() {
-      li.classList.remove('task-enter');
-      li.removeEventListener('animationend', handler);
-    }, { once: true });
+    li.style.animationDelay = `${Math.min(i, 20) * (ANIM_STAGGER_MS / 1000)}s`;
+    onTaskEnterEnd(li);
     taskList.appendChild(li);
   });
   updateEmptyState();
