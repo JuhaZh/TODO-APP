@@ -1251,7 +1251,7 @@ async function toggleImportant(id) {
   }
 }
 
-// --- Delete Task (dual-track: GPU collapse + container shrink) ---
+// --- Delete Task (single-track: visually hide li, animate container shrink) ---
 async function deleteTask(id) {
   const li = taskList.querySelector(`[data-id="${id}"]`);
   if (!li) return;
@@ -1262,52 +1262,42 @@ async function deleteTask(id) {
   if (idx === -1) return;
   const removed = tasks.splice(idx, 1)[0];
 
-  // Start animation immediately (optimistic)
-  _cancelContainerTransitions();
-
-  const oldH = container.offsetHeight;
-  const liBounds = li.getBoundingClientRect();
-  const gap = Math.min(liBounds.height, oldH);
-
   // Fire Supabase delete in background — rollback on failure
   db.from('tasks').delete().eq('id', id).then(({ error: delErr }) => {
     if (delErr) {
       tasks.splice(idx, 0, removed);
-      delete li.dataset._deleting;
+      render();
       handleError(delErr, '删除失败');
     }
   });
 
-  // Lock container to its current visible height so the subsequent
-  // transition from current height -> target height is smooth.
-  container.style.height = oldH + 'px';
-  container.style.transition = 'none';
-  container.offsetHeight;
+  // Cancel any conflicting container transitions
+  _cancelContainerTransitions();
 
-  // Li: GPU-only visual collapse — both properties at 0.25s to match container
-  li.style.transition = `transform ${ANIM_DURATION_COLLAPSE} ${ANIM_EASE_COLLAPSE}, opacity ${ANIM_DURATION_COLLAPSE} ${ANIM_EASE_COLLAPSE}`;
-  li.style.transformOrigin = 'top';
-  li.style.transform = 'scaleY(0)';
+  // Measure current container height, then temporarily hide li to measure gap
+  const oldH = container.offsetHeight;
+  li.style.display = 'none';
+  const gap = oldH - container.offsetHeight;
+
+  // Restore li display, then visually hide with opacity transition
+  li.style.display = '';
+  li.style.transition = `opacity ${ANIM_DURATION_COLLAPSE} ${ANIM_EASE_COLLAPSE}`;
   li.style.opacity = '0';
   li.style.pointerEvents = 'none';
 
-  // Container: parallel smooth shrink
+  // Lock container to old height so it can animate smoothly
+  container.style.height = oldH + 'px';
+  container.style.transition = 'none';
+  container.offsetHeight; // force layout commit
+
+  // Single-track: only the container height transitions
   container.style.transition = `height ${ANIM_DURATION_COLLAPSE} ${ANIM_EASE_COLLAPSE}`;
   container.style.height = (oldH - gap) + 'px';
 
-  let cleaned = false;
-  function cleanup() {
-    if (cleaned) return;
-    cleaned = true;
-    // Clean up all our listeners
-    li.removeEventListener('transitionend', onLiEnd);
-    if (_onDeleteEnd === onContainerEnd) {
-      container.removeEventListener('transitionend', onContainerEnd);
-      _onDeleteEnd = null;
-    }
-    // Only remove li if it's still in the DOM
+  function finishDelete() {
+    container.removeEventListener('transitionend', finishDelete);
+    _onDeleteEnd = null;
     if (li.parentNode) li.remove();
-    // Only reset container styles if no smoothHeightChange is active
     if (!_onSmoothEnd) {
       container.style.height = '';
       container.style.transition = '';
@@ -1315,21 +1305,12 @@ async function deleteTask(id) {
     updateUI();
   }
 
-  function onLiEnd(e) {
-    // Only react to 'transform' completion so cleanup runs after
-    // the visual collapse, not after the opacity fades.
-    if (e.propertyName !== 'transform') return;
-    li.removeEventListener('transitionend', onLiEnd);
-    cleanup();
+  _onDeleteEnd = finishDelete;
+  if (gap === 0) {
+    finishDelete();
+  } else {
+    container.addEventListener('transitionend', finishDelete);
   }
-
-  function onContainerEnd() {
-    cleanup();
-  }
-
-  _onDeleteEnd = onContainerEnd;
-  li.addEventListener('transitionend', onLiEnd);
-  container.addEventListener('transitionend', onContainerEnd);
 }
 
 // --- Clear Completed (bulk, uses re-render) ---
