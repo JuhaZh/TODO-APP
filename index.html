@@ -161,6 +161,26 @@
   background: #1e293b;
 }
 
+[data-theme="dark"] .badge-remind {
+  color: #a78bfa;
+  background: #2e1a4a;
+  border-color: rgba(167, 139, 250, 0.2);
+}
+
+[data-theme="dark"] .btn-remind:hover {
+  background: rgba(244, 114, 182, 0.15);
+  color: var(--pink-400);
+}
+
+[data-theme="dark"] .reminder-popover {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .reminder-popover button:hover {
+  background: rgba(244, 114, 182, 0.2);
+}
+
 /* Theme toggle */
 .btn-theme {
   position: absolute;
@@ -570,6 +590,19 @@ li.completed .task-text::after {
   line-height: 1.6;
 }
 
+.badge-remind {
+  font-size: 10px;
+  font-weight: 600;
+  color: #7c3aed;
+  background: #f5f3ff;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+  border: 1px solid rgba(124, 58, 237, 0.15);
+  line-height: 1.6;
+}
+
 /* ============================================
    Buttons - Important & Delete
    ============================================ */
@@ -608,6 +641,70 @@ li.completed .task-text::after {
 .btn-important.active:hover {
   color: #d97706;
   background: var(--color-important-bg);
+}
+
+/* --- Bell / Reminder Button --- */
+.btn-remind {
+  flex-shrink: 0;
+  width: 32px; height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast) var(--ease-out);
+  color: var(--slate-300);
+  padding: 0;
+  position: relative;
+}
+.btn-remind:hover {
+  color: var(--pink-400);
+  background: var(--pink-50);
+  transform: scale(1.1);
+}
+.btn-remind.active {
+  color: var(--pink-500);
+}
+
+.reminder-popover {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 6px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  display: none;
+  z-index: 10;
+  white-space: nowrap;
+  min-width: 120px;
+}
+.reminder-popover.show {
+  display: block;
+}
+.reminder-popover button {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  border-radius: var(--radius-sm);
+  text-align: left;
+  font-family: inherit;
+}
+.reminder-popover button:hover {
+  background: var(--color-accent-light);
+}
+.reminder-popover .reminder-clear {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
 }
 
 .btn-delete {
@@ -1008,6 +1105,7 @@ const STAR_FILLED = '<svg width="15" height="15" viewBox="0 0 24 24" fill="curre
 const STAR_OUTLINE = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
 const CHECK_SVG = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 const DELETE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+const BELL_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
 const ANIM_DURATION_SMOOTH = '0.3s';
 const ANIM_DURATION_COLLAPSE = '0.25s';
 const ANIM_EASE_SMOOTH = 'cubic-bezier(0.4, 0, 0.2, 1)';
@@ -1057,7 +1155,7 @@ function _cancelContainerTransitions() {
 async function sync() {
   const { data, error } = await db.from('tasks').select('*').order('created_at', { ascending: true });
   if (error) { console.error('同步失败:', error.message); return; }
-  tasks = (data || []).map(t => ({ ...t, createdAt: t.created_at }));
+  tasks = (data || []).map(t => ({ ...t, createdAt: t.created_at, remindAt: t.remind_at ? new Date(t.remind_at).getTime() : null }));
   render();
 }
 
@@ -1148,6 +1246,12 @@ function createTaskElement(task) {
     badge.textContent = '重要';
     taskMeta.appendChild(badge);
   }
+  if (task.remindAt) {
+    const remindBadge = document.createElement('span');
+    remindBadge.className = 'badge-remind';
+    remindBadge.textContent = '⏰ ' + formatRemindTime(task.remindAt);
+    taskMeta.appendChild(remindBadge);
+  }
 
   taskContent.append(taskText, taskMeta);
 
@@ -1158,6 +1262,40 @@ function createTaskElement(task) {
   btnImportant.innerHTML = task.important ? STAR_FILLED : STAR_OUTLINE;
   btnImportant.addEventListener('click', () => toggleImportant(task.id));
 
+  // --- Reminder Button ---
+  const btnRemind = document.createElement('button');
+  btnRemind.className = 'btn-remind' + (task.remindAt ? ' active' : '');
+  btnRemind.setAttribute('aria-label', '设置提醒');
+  btnRemind.innerHTML = BELL_SVG;
+
+  const remindPopover = document.createElement('div');
+  remindPopover.className = 'reminder-popover';
+  remindPopover.innerHTML = `
+    <button data-min="30">30 分钟后</button>
+    <button data-min="60">1 小时后</button>
+    <button data-min="180">3 小时后</button>
+    <button data-min="540">明天 9:00</button>
+    <button class="reminder-clear" data-min="0">清除提醒</button>
+  `;
+  btnRemind.appendChild(remindPopover);
+
+  btnRemind.addEventListener('click', (e) => {
+    e.stopPropagation();
+    remindPopover.classList.toggle('show');
+  });
+
+  remindPopover.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const min = parseInt(btn.dataset.min);
+    const remindAt = min === 0 ? null
+      : btn.dataset.min === '540' ? getTomorrow9AM()
+      : Date.now() + min * 60 * 1000;
+    setReminder(task.id, remindAt);
+    remindPopover.classList.remove('show');
+  });
+
   // --- Delete Button ---
   const btnDelete = document.createElement('button');
   btnDelete.className = 'btn-delete';
@@ -1165,7 +1303,7 @@ function createTaskElement(task) {
   btnDelete.innerHTML = DELETE_SVG;
   btnDelete.addEventListener('click', () => deleteTask(task.id));
 
-  li.append(checkbox, taskContent, btnImportant, btnDelete);
+  li.append(checkbox, taskContent, btnImportant, btnRemind, btnDelete);
   return li;
 }
 
@@ -1252,7 +1390,8 @@ async function addTask(text) {
     text,
     completed: false,
     createdAt: Date.now(),
-    important: false
+    important: false,
+    remindAt: null
   };
 
   tasks.push(task);
@@ -1264,7 +1403,7 @@ async function addTask(text) {
 
   const { error } = await db.from('tasks').insert({
     id: task.id, text: task.text, completed: task.completed,
-    important: task.important, created_at: task.createdAt
+    important: task.important, created_at: task.createdAt, remind_at: null
   });
   if (error) {
     tasks = tasks.filter(t => t.id !== task.id);
@@ -1550,12 +1689,91 @@ function toggleTheme() {
 
 document.getElementById('btnTheme').addEventListener('click', toggleTheme);
 
+// Close all reminder popovers on outside click
+document.addEventListener('click', () => {
+  document.querySelectorAll('.reminder-popover.show').forEach(p => p.classList.remove('show'));
+});
+
+/* ============================================
+   Notifications / Reminders
+   ============================================ */
+const notifTimers = {};
+
+function getTomorrow9AM() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  return d.getTime();
+}
+
+function formatRemindTime(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const isTomorrow = d.getDate() !== now.getDate() && d > now;
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return isTomorrow ? `明天 ${hh}:${mm}` : `${hh}:${mm}`;
+}
+
+let _notifPerm = false;
+
+async function ensureNotifPermission() {
+  if (_notifPerm) return true;
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'granted') { _notifPerm = true; return true; }
+  if (Notification.permission === 'denied') return false;
+  const granted = await Notification.requestPermission();
+  _notifPerm = granted === 'granted';
+  return _notifPerm;
+}
+
+function scheduleNotification(id, text, remindAt) {
+  clearTimeout(notifTimers[id]);
+  if (!remindAt) return;
+  const delay = remindAt - Date.now();
+  if (delay <= 0) return;
+  notifTimers[id] = setTimeout(() => {
+    if (Notification.permission === 'granted') {
+      const n = new Notification('待办提醒', { body: text, icon: 'icon-192x192.png', tag: 'todo-remind', requireInteraction: true });
+      n.addEventListener('click', () => { clients.openWindow('/TODO-APP/'); });
+    }
+    delete notifTimers[id];
+  }, delay);
+}
+
+async function setReminder(id, remindAt) {
+  const task = tasks.find(t => t.id === id);
+  if (!task) return;
+  task.remindAt = remindAt;
+  render();
+  if (remindAt) {
+    await ensureNotifPermission();
+    scheduleNotification(id, task.text, remindAt);
+  } else {
+    clearTimeout(notifTimers[id]);
+    delete notifTimers[id];
+  }
+  db.from('tasks').update({ remind_at: remindAt ? new Date(remindAt).toISOString() : null }).eq('id', id);
+}
+
 /* ============================================
    Init
    ============================================ */
 (async function init() {
   applyTheme(getTheme());
   await sync();
+
+  // Re-schedule pending reminders from loaded tasks
+  await ensureNotifPermission();
+  tasks.forEach(t => {
+    if (t.remindAt && t.remindAt > Date.now()) {
+      scheduleNotification(t.id, t.text, t.remindAt);
+    } else if (t.remindAt && t.remindAt <= Date.now()) {
+      // Expired reminder — clear it
+      t.remindAt = null;
+    }
+  });
+
   await migrateLocalData();
 })();
 </script>

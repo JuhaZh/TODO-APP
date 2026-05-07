@@ -33,3 +33,16 @@ self.addEventListener('fetch', e => {
     caches.match(e.request).then(cached => cached || fetch(e.request))
   );
 });
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type: 'window' }).then(clients => {
+      const url = '/TODO-APP/';
+      for (const c of clients) {
+        if (c.url.includes(url)) { c.focus(); return; }
+      }
+      if (clients.openWindow) clients.openWindow(url);
+    })
+  );
+});
