@@ -1183,33 +1183,24 @@ function smoothHeightChange(mutate) {
 
   mutate();
 
-  /*
-    BUG FIX: scrollHeight returns clientHeight (visible area) when both
-    overflow:hidden AND an explicit inline height are set on the element.
-    This means if the old locked height (oldHeight) is larger than the
-    true new content height, scrollHeight incorrectly returns clientHeight
-    (~oldHeight) instead of the actual content height.
-
-    Fix: temporarily release the explicit height lock so scrollHeight
-    reads the true content height, then re-lock to oldHeight before
-    starting the CSS transition. All of this is synchronous so no
-    visual flicker occurs.
-  */
-  container.style.height = '';
-  const newHeight = container.scrollHeight;
-  container.style.height = oldHeight + 'px';
-  container.offsetHeight; // re-lock layout
-
-  container.style.transition = `height ${ANIM_DURATION_SMOOTH} ${ANIM_EASE_SMOOTH}`;
-  container.style.height = newHeight + 'px';
-
-  const handler = function handler() {
-    _onSmoothEnd = null;
+  // Use rAF to guarantee DOM mutations are fully laid out before measuring
+  requestAnimationFrame(() => {
     container.style.height = '';
-    container.style.transition = '';
-  };
-  _onSmoothEnd = handler;
-  container.addEventListener('transitionend', handler, { once: true });
+    const newHeight = container.scrollHeight;
+    container.style.height = oldHeight + 'px';
+    container.offsetHeight; // re-lock
+
+    container.style.transition = `height ${ANIM_DURATION_SMOOTH} ${ANIM_EASE_SMOOTH}`;
+    container.style.height = newHeight + 'px';
+
+    const handler = function handler() {
+      _onSmoothEnd = null;
+      container.style.height = '';
+      container.style.transition = '';
+    };
+    _onSmoothEnd = handler;
+    container.addEventListener('transitionend', handler, { once: true });
+  });
 }
 
 /* ============================================
