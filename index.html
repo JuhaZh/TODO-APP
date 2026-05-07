@@ -1177,13 +1177,19 @@ function smoothHeightChange(mutate) {
   _cancelContainerTransitions();
 
   const oldHeight = container.offsetHeight;
+  const wrapper = document.querySelector('.task-list-wrapper');
+  const wrapperOverflow = wrapper.style.overflowY;
+
   container.style.height = oldHeight + 'px';
   container.style.transition = 'none';
   container.offsetHeight; // commit lock
 
   mutate();
 
-  // Use rAF to guarantee DOM mutations are fully laid out before measuring
+  // Suppress scrollbar during transition — scrollbar flicker causes
+  // content-width reflow each frame, creating visual jitter.
+  wrapper.style.overflowY = 'hidden';
+
   requestAnimationFrame(() => {
     container.style.height = '';
     const newHeight = container.scrollHeight;
@@ -1197,6 +1203,7 @@ function smoothHeightChange(mutate) {
       _onSmoothEnd = null;
       container.style.height = '';
       container.style.transition = '';
+      wrapper.style.overflowY = wrapperOverflow || '';
     };
     _onSmoothEnd = handler;
     container.addEventListener('transitionend', handler, { once: true });
