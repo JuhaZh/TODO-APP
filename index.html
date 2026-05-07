@@ -93,6 +93,100 @@
   --duration-slow: 350ms;
 }
 
+/* Dark theme overrides */
+[data-theme="dark"] {
+  --color-bg: #1e293b;
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-tertiary: #64748b;
+  --color-text-muted: #475569;
+  --color-border: #334155;
+  --color-border-light: #1e293b;
+
+  --color-accent: #f472b6;
+  --color-accent-hover: #f9a8d4;
+  --color-accent-light: #4a1d3a;
+
+  --color-danger: #f87171;
+  --color-danger-bg: #3b1c1c;
+
+  --color-important: #fbbf24;
+  --color-important-bg: #3d2e0a;
+
+  --color-completed-text: #64748b;
+  --color-completed-bg: #0f172a;
+
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.4);
+  --shadow-xl: 0 20px 60px rgba(0,0,0,0.5);
+  --shadow-button: 0 4px 14px rgba(244,114,182,0.25);
+  --shadow-button-hover: 0 6px 20px rgba(244,114,182,0.35);
+  --shadow-task: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-task-hover: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+[data-theme="dark"] body {
+  background: linear-gradient(135deg, #1a0a20 0%, #0f172a 50%, #0a1a10 100%);
+}
+
+[data-theme="dark"] .container {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(255,255,255,0.08);
+}
+
+[data-theme="dark"] .header {
+  background: linear-gradient(135deg, rgba(74,29,58,0.6) 0%, rgba(30,41,59,0.6) 50%, rgba(10,26,16,0.4) 100%);
+}
+
+[data-theme="dark"] .input-wrapper input {
+  background: #0f172a;
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .input-wrapper input:focus {
+  background: #1e293b;
+}
+
+[data-theme="dark"] .footer {
+  background: #0f172a;
+}
+
+[data-theme="dark"] .task-list-wrapper::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+[data-theme="dark"] .btn-footer {
+  background: #1e293b;
+}
+
+/* Theme toggle */
+.btn-theme {
+  position: absolute;
+  top: 24px; right: 24px;
+  width: 36px; height: 36px;
+  border: none;
+  background: rgba(255,255,255,0.3);
+  backdrop-filter: blur(4px);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast) var(--ease-out);
+  line-height: 1;
+  z-index: 1;
+}
+.btn-theme:hover {
+  background: rgba(255,255,255,0.5);
+  transform: scale(1.1);
+}
+[data-theme="dark"] .btn-theme {
+  background: rgba(255,255,255,0.1);
+}
+
 /* ============================================
    Base & Reset
    ============================================ */
@@ -846,6 +940,7 @@ li.completed .task-text::after {
   <div class="header">
     <h1>待办清单</h1>
     <p>让每一天都井井有条</p>
+    <button class="btn-theme" id="btnTheme" aria-label="切换主题" title="切换暗色/亮色模式">🌙</button>
   </div>
 
   <!-- Input -->
@@ -1430,9 +1525,38 @@ btnClearCompleted.addEventListener('click', clearCompleted);
 btnDeleteAll.addEventListener('click', deleteAll);
 
 /* ============================================
+   Theme Toggle
+   ============================================ */
+function getTheme() {
+  const saved = localStorage.getItem('theme');
+  if (saved) return saved;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function applyTheme(theme) {
+  const icon = document.getElementById('btnTheme');
+  if (theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    if (icon) icon.textContent = '☀️';
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    if (icon) icon.textContent = '🌙';
+  }
+  localStorage.setItem('theme', theme);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+document.getElementById('btnTheme').addEventListener('click', toggleTheme);
+
+/* ============================================
    Init
    ============================================ */
 (async function init() {
+  applyTheme(getTheme());
   await sync();
   await migrateLocalData();
 })();
