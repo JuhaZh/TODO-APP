@@ -456,6 +456,20 @@ body {
   animation: taskSlideIn 0.35s var(--ease-bounce) forwards;
 }
 
+/* Drag to reorder */
+.task-list li[draggable="true"] {
+  cursor: grab;
+}
+.task-list li[draggable="true"]:active {
+  cursor: grabbing;
+}
+.task-list li.dragging {
+  opacity: 0.4;
+}
+.task-list li.drag-over {
+  border-top: 2px solid var(--color-accent);
+}
+
 /* Completed state */
 .task-list li.completed {
   background: var(--color-completed-bg);
@@ -1191,7 +1205,7 @@ function _cancelContainerTransitions() {
    Persistence — Supabase
    ============================================ */
 async function sync() {
-  const { data, error } = await db.from('tasks').select('*').order('created_at', { ascending: true });
+  const { data, error } = await db.from('tasks').select('*').order('position', { ascending: true }).order('created_at', { ascending: true });
   if (error) { console.error('同步失败:', error.message); return; }
   tasks = (data || []).map(t => ({ ...t, createdAt: t.created_at, remindAt: t.remind_at ? new Date(t.remind_at).getTime() : null }));
   render();
@@ -1244,6 +1258,7 @@ function formatTime(ts) {
 function createTaskElement(task) {
   const li = document.createElement('li');
   li.dataset.id = task.id;
+  li.setAttribute('draggable', 'true');
 
   if (task.completed) li.classList.add('completed');
 
@@ -1455,7 +1470,7 @@ async function addTask(text) {
   _realtimeIgnore = true;
   const { error } = await db.from('tasks').insert({
     id: task.id, text: task.text, completed: task.completed,
-    important: task.important, created_at: task.createdAt
+    important: task.important, created_at: task.createdAt, position: tasks.length - 1
   });
   setTimeout(() => { _realtimeIgnore = false; }, 100);
   if (error) {
@@ -1720,6 +1735,53 @@ taskInput.addEventListener('keydown', (e) => {
 
 btnClearCompleted.addEventListener('click', clearCompleted);
 btnDeleteAll.addEventListener('click', deleteAll);
+
+/* ============================================
+   Drag to Reorder
+   ============================================ */
+let _dragSrc = null;
+
+taskList.addEventListener('dragstart', (e) => {
+  const li = e.target.closest('li');
+  if (!li) { e.preventDefault(); return; }
+  _dragSrc = li;
+  li.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+});
+
+taskList.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  const li = e.target.closest('li');
+  if (!li || li === _dragSrc) return;
+  li.classList.add('drag-over');
+});
+
+taskList.addEventListener('dragleave', (e) => {
+  const li = e.target.closest('li');
+  if (li) li.classList.remove('drag-over');
+});
+
+taskList.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const targetLi = e.target.closest('li');
+  if (!targetLi || !_dragSrc || targetLi === _dragSrc) return;
+  targetLi.classList.remove('drag-over');
+  _dragSrc.classList.remove('dragging');
+
+  const srcId = Number(_dragSrc.dataset.id);
+  const dstId = Number(targetLi.dataset.id);
+  const srcIdx = tasks.findIndex(t => t.id === srcId);
+  const dstIdx = tasks.findIndex(t => t.id === dstId);
+  if (srcIdx === -1 || dstIdx === -1) return;
+  const [moved] = tasks.splice(srcIdx, 1);
+  tasks.splice(dstIdx, 0, moved);
+
+  render(false);
+  tasks.forEach((t, i) => {
+    db.from('tasks').update({ position: i }).eq('id', t.id);
+  });
+  _dragSrc = null;
+});
 
 /* ============================================
    Theme Toggle
