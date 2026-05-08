@@ -1784,6 +1784,37 @@ async function setReminder(id, remindAt) {
   });
 
   await migrateLocalData();
+
+  // Realtime sync for multi-device live updates
+  db.channel('tasks-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },
+      (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const t = payload.new;
+          if (tasks.find(x => x.id === t.id)) return;
+          const task = { ...t, createdAt: t.created_at, remindAt: t.remind_at ? new Date(t.remind_at).getTime() : null };
+          tasks.push(task);
+          smoothHeightChange(() => appendTaskToDOM(task));
+        } else if (payload.eventType === 'UPDATE') {
+          const t = payload.new;
+          const task = tasks.find(x => x.id === t.id);
+          if (!task) return;
+          task.completed = t.completed;
+          task.important = t.important;
+          task.remindAt = t.remind_at ? new Date(t.remind_at).getTime() : null;
+          render();
+        } else if (payload.eventType === 'DELETE') {
+          const id = payload.old.id;
+          const li = taskList.querySelector(`[data-id="${id}"]`);
+          if (!li) return;
+          tasks = tasks.filter(x => x.id !== id);
+          li.style.opacity = '0';
+          li.style.pointerEvents = 'none';
+          setTimeout(() => { if (li.parentNode) li.remove(); updateUI(); }, 250);
+        }
+      }
+    )
+    .subscribe();
 })();
 </script>
 <script>
