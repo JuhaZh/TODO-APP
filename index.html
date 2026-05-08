@@ -1158,10 +1158,6 @@ const STAR_OUTLINE = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none
 const CHECK_SVG = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 const DELETE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
 const BELL_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
-const ANIM_DURATION_SMOOTH = '0.3s';
-const ANIM_DURATION_COLLAPSE = '0.25s';
-const ANIM_EASE_SMOOTH = 'cubic-bezier(0.4, 0, 0.2, 1)';
-const ANIM_EASE_COLLAPSE = 'ease-out';
 const ANIM_STAGGER_MS = 50;
 const TASK_MAX_LENGTH = 200;
 
@@ -1182,22 +1178,15 @@ const btnClearCompleted = document.getElementById('btnClearCompleted');
 const btnDeleteAll = document.getElementById('btnDeleteAll');
 
 /* ============================================
-   Container Transition Coordinator
-   Prevents conflicting height transitions between
-   smoothHeightChange and deleteTask by tracking
-   and canceling pending listeners.
+   Animation Coordinator — tracks single WAAPI
+   animation on the container, cancels conflicts.
    ============================================ */
-let _onSmoothEnd = null;
-let _onDeleteEnd = null;
+let _containerAnim = null;
 
-function _cancelContainerTransitions() {
-  if (_onSmoothEnd) {
-    container.removeEventListener('transitionend', _onSmoothEnd);
-    _onSmoothEnd = null;
-  }
-  if (_onDeleteEnd) {
-    container.removeEventListener('transitionend', _onDeleteEnd);
-    _onDeleteEnd = null;
+function _cancelContainerAnim() {
+  if (_containerAnim) {
+    _containerAnim.cancel();
+    _containerAnim = null;
   }
 }
 
@@ -1374,43 +1363,60 @@ function createTaskElement(task) {
 }
 
 /* ============================================
-   Smooth Container Height Transition
+   Smooth Container Height Transition (WAAPI)
    ============================================ */
 function smoothHeightChange(mutate) {
-  // Cancel any conflicting transitions before starting
-  _cancelContainerTransitions();
+  _cancelContainerAnim();
 
-  const oldHeight = container.offsetHeight;
-  const wrapper = document.querySelector('.task-list-wrapper');
+  const wrapper = taskList.closest('.task-list-wrapper');
   const wrapperOverflow = wrapper.style.overflowY;
 
-  container.style.height = oldHeight + 'px';
+  const oldH = container.offsetHeight;
+  container.style.height = oldH + 'px';
   container.style.transition = 'none';
-  container.offsetHeight; // commit lock
+  container.offsetHeight; // force layout commit
 
   mutate();
 
-  // Suppress scrollbar during transition — scrollbar flicker causes
-  // content-width reflow each frame, creating visual jitter.
+  // Suppress scrollbar during animation — prevents content-width reflow
   wrapper.style.overflowY = 'hidden';
 
   requestAnimationFrame(() => {
     container.style.height = '';
-    const newHeight = container.scrollHeight;
-    container.style.height = oldHeight + 'px';
-    container.offsetHeight; // re-lock
-
-    container.style.transition = `height ${ANIM_DURATION_SMOOTH} ${ANIM_EASE_SMOOTH}`;
-    container.style.height = newHeight + 'px';
-
-    const handler = function handler() {
-      _onSmoothEnd = null;
-      container.style.height = '';
+    const newH = container.scrollHeight;
+    if (newH === oldH) {
       container.style.transition = '';
       wrapper.style.overflowY = wrapperOverflow || '';
-    };
-    _onSmoothEnd = handler;
-    container.addEventListener('transitionend', handler, { once: true });
+      return;
+    }
+
+    container.style.height = oldH + 'px';
+    container.offsetHeight; // re-lock
+    container.style.contain = 'layout style paint';
+    container.style.willChange = 'height';
+
+    const anim = container.animate([
+      { height: oldH + 'px' },
+      { height: newH + 'px' }
+    ], {
+      duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 300,
+      easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+      fill: 'none'
+    });
+
+    _containerAnim = anim;
+
+    function cleanup() {
+      if (_containerAnim === anim) _containerAnim = null;
+      container.style.height = '';
+      container.style.transition = '';
+      container.style.contain = '';
+      container.style.willChange = '';
+      wrapper.style.overflowY = wrapperOverflow || '';
+    }
+
+    anim.onfinish = cleanup;
+    anim.oncancel = cleanup;
   });
 }
 
@@ -1570,7 +1576,7 @@ async function toggleImportant(id) {
   }
 }
 
-// --- Delete Task (single-track: visually hide li, animate container shrink) ---
+// --- Delete Task (fade-then-shrink with WAAPI) ---
 async function deleteTask(id) {
   const li = taskList.querySelector(`[data-id="${id}"]`);
   if (!li) return;
@@ -1592,56 +1598,93 @@ async function deleteTask(id) {
     }
   });
 
-  // Cancel any conflicting container transitions
-  _cancelContainerTransitions();
+  _cancelContainerAnim();
 
-  // Measure current container height, then temporarily hide li to measure gap
+  // Phase 1: Fade out the task item (GPU-composited)
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    li.style.willChange = 'opacity, transform';
+    const fadeAnim = li.animate([
+      { opacity: 1, transform: 'scale(1)' },
+      { opacity: 0, transform: 'scale(0.92)' }
+    ], { duration: 200, easing: 'ease-out', fill: 'forwards' });
+    await fadeAnim.finished.catch(() => {});
+  }
+
+  // Phase 2: Remove from DOM and shrink container
   const oldH = container.offsetHeight;
-  li.style.display = 'none';
-  const gap = oldH - container.offsetHeight;
+  const wrapper = taskList.closest('.task-list-wrapper');
+  const wrapperOverflow = wrapper.style.overflowY;
+  wrapper.style.overflowY = 'hidden';
 
-  // Restore li display, then visually hide with opacity transition
-  li.style.display = '';
-  li.style.transition = `opacity ${ANIM_DURATION_COLLAPSE} ${ANIM_EASE_COLLAPSE}`;
-  li.style.opacity = '0';
-  li.style.pointerEvents = 'none';
+  li.remove();
+  const newH = container.offsetHeight;
 
-  // Lock container to old height so it can animate smoothly
+  if (oldH === newH) {
+    wrapper.style.overflowY = wrapperOverflow || '';
+    updateUI();
+    showUndoToast(removed);
+    return;
+  }
+
   container.style.height = oldH + 'px';
   container.style.transition = 'none';
-  container.offsetHeight; // force layout commit
+  container.style.contain = 'layout style paint';
+  container.style.willChange = 'height';
+  container.offsetHeight; // force layout
 
-  // Single-track: only the container height transitions
-  container.style.transition = `height ${ANIM_DURATION_COLLAPSE} ${ANIM_EASE_COLLAPSE}`;
-  container.style.height = (oldH - gap) + 'px';
+  const anim = container.animate([
+    { height: oldH + 'px' },
+    { height: newH + 'px' }
+  ], { duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 250, easing: 'ease-out', fill: 'none' });
 
-  function finishDelete() {
-    container.removeEventListener('transitionend', finishDelete);
-    _onDeleteEnd = null;
-    if (li.parentNode) li.remove();
-    if (!_onSmoothEnd) {
-      container.style.height = '';
-      container.style.transition = '';
-    }
+  _containerAnim = anim;
+
+  function cleanup() {
+    if (_containerAnim === anim) _containerAnim = null;
+    container.style.height = '';
+    container.style.transition = '';
+    container.style.contain = '';
+    container.style.willChange = '';
+    wrapper.style.overflowY = wrapperOverflow || '';
     updateUI();
     showUndoToast(removed);
   }
 
-  _onDeleteEnd = finishDelete;
-  if (gap === 0) {
-    finishDelete();
-  } else {
-    container.addEventListener('transitionend', finishDelete);
-  }
+  anim.onfinish = cleanup;
+  anim.oncancel = cleanup;
 }
 
-// --- Clear Completed (bulk, uses re-render) ---
+// --- Clear Completed (fade-then-shrink, no full re-render) ---
 async function clearCompleted() {
   if (!tasks.some(t => t.completed)) return;
   const removed = tasks.filter(t => t.completed);
   const ids = removed.map(t => t.id);
+
+  // Phase 1: Fade out completed items (GPU-composited opacity + transform)
+  const completedLis = [...taskList.querySelectorAll('li.completed')];
+  if (completedLis.length === 0) return;
+
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const delayPerItem = Math.min(30, Math.floor(200 / completedLis.length));
+    const fadeOuts = completedLis.map((li, i) => {
+      li.style.willChange = 'opacity, transform';
+      return li.animate([
+        { opacity: 1, transform: 'scale(1)' },
+        { opacity: 0, transform: 'scale(0.95)' }
+      ], {
+        duration: 200, delay: i * delayPerItem,
+        easing: 'ease-out', fill: 'forwards'
+      }).finished.catch(() => {});
+    });
+    await Promise.all(fadeOuts);
+  }
+
+  // Phase 2: Remove from state
   tasks = tasks.filter(t => !t.completed);
-  smoothHeightChange(() => { render(false); });
+
+  // Phase 3: Remove from DOM and shrink container
+  smoothHeightChange(() => { completedLis.forEach(li => li.remove()); });
+
   const { error: clrErr } = await db.from('tasks').delete().in('id', ids);
   if (clrErr) {
     tasks.push(...removed);
