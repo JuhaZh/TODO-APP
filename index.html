@@ -669,10 +669,6 @@ li.completed .task-text::after {
 }
 
 .reminder-popover {
-  position: absolute;
-  bottom: 100%;
-  right: 0;
-  margin-bottom: 6px;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -1268,32 +1264,45 @@ function createTaskElement(task) {
   btnRemind.setAttribute('aria-label', '设置提醒');
   btnRemind.innerHTML = BELL_SVG;
 
-  const remindPopover = document.createElement('div');
-  remindPopover.className = 'reminder-popover';
-  remindPopover.innerHTML = `
-    <button data-min="30">30 分钟后</button>
-    <button data-min="60">1 小时后</button>
-    <button data-min="180">3 小时后</button>
-    <button data-min="540">明天 9:00</button>
-    <button class="reminder-clear" data-min="0">清除提醒</button>
-  `;
-  btnRemind.appendChild(remindPopover);
+  let remindPopover = null;
+
+  function openRemindPopover() {
+    if (remindPopover) { remindPopover.remove(); remindPopover = null; return; }
+    const div = document.createElement('div');
+    div.className = 'reminder-popover show';
+    div.innerHTML = `
+      <button data-min="30">30 分钟后</button>
+      <button data-min="60">1 小时后</button>
+      <button data-min="180">3 小时后</button>
+      <button data-min="540">明天 9:00</button>
+      <button class="reminder-clear" data-min="0">清除提醒</button>
+    `;
+    document.body.appendChild(div);
+    const rect = btnRemind.getBoundingClientRect();
+    const top = rect.top - div.offsetHeight - 4;
+    const left = Math.min(rect.right - div.offsetWidth, window.innerWidth - div.offsetWidth - 8);
+    div.style.position = 'fixed';
+    div.style.top = Math.max(4, top) + 'px';
+    div.style.left = Math.max(4, left) + 'px';
+    div.style.zIndex = '1000';
+    div.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const min = parseInt(btn.dataset.min);
+      const remindAt = min === 0 ? null
+        : btn.dataset.min === '540' ? getTomorrow9AM()
+        : Date.now() + min * 60 * 1000;
+      setReminder(task.id, remindAt);
+      div.remove();
+      remindPopover = null;
+    });
+    remindPopover = div;
+  }
 
   btnRemind.addEventListener('click', (e) => {
     e.stopPropagation();
-    remindPopover.classList.toggle('show');
-  });
-
-  remindPopover.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const btn = e.target.closest('button');
-    if (!btn) return;
-    const min = parseInt(btn.dataset.min);
-    const remindAt = min === 0 ? null
-      : btn.dataset.min === '540' ? getTomorrow9AM()
-      : Date.now() + min * 60 * 1000;
-    setReminder(task.id, remindAt);
-    remindPopover.classList.remove('show');
+    openRemindPopover();
   });
 
   // --- Delete Button ---
@@ -1403,7 +1412,7 @@ async function addTask(text) {
 
   const { error } = await db.from('tasks').insert({
     id: task.id, text: task.text, completed: task.completed,
-    important: task.important, created_at: task.createdAt, remind_at: null
+    important: task.important, created_at: task.createdAt
   });
   if (error) {
     tasks = tasks.filter(t => t.id !== task.id);
@@ -1691,7 +1700,7 @@ document.getElementById('btnTheme').addEventListener('click', toggleTheme);
 
 // Close all reminder popovers on outside click
 document.addEventListener('click', () => {
-  document.querySelectorAll('.reminder-popover.show').forEach(p => p.classList.remove('show'));
+  document.querySelectorAll('.reminder-popover.show').forEach(p => p.remove());
 });
 
 /* ============================================
