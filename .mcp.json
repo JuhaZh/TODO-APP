@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "playwright": {
-      "command": "node",
-      "args": ["./node_modules/@playwright/mcp/cli.js", "--headless", "--executable-path", "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"]
+      "command": "npx.cmd",
+      "args": ["playwright-mcp", "--headless", "--executable-path", "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"]
     }
   }
 }
