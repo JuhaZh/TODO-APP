@@ -3,6 +3,10 @@
     "playwright": {
       "command": "npx.cmd",
       "args": ["playwright-mcp", "--headless", "--executable-path", "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"]
+    },
+    "context7": {
+      "command": "npx.cmd",
+      "args": ["context7-mcp"]
     }
   }
 }

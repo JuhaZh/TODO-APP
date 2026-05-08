@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/JuhaZh/TODO-APP#readme",
   "dependencies": {
-    "@playwright/mcp": "^0.0.73"
+    "@playwright/mcp": "^0.0.73",
+    "@upstash/context7-mcp": "^2.2.4"
   }
 }
