@@ -1134,6 +1134,7 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
    State
    ============================================ */
 let tasks = [];
+let _realtimeIgnore = false;
 
 /* ============================================
    Constants
@@ -1451,10 +1452,12 @@ async function addTask(text) {
   taskInput.value = '';
   taskInput.focus();
 
+  _realtimeIgnore = true;
   const { error } = await db.from('tasks').insert({
     id: task.id, text: task.text, completed: task.completed,
     important: task.important, created_at: task.createdAt
   });
+  setTimeout(() => { _realtimeIgnore = false; }, 100);
   if (error) {
     tasks = tasks.filter(t => t.id !== task.id);
     const li = taskList.querySelector(`[data-id="${task.id}"]`);
@@ -1483,7 +1486,9 @@ async function toggleCompleted(id) {
 
   updateFooter();
 
+  _realtimeIgnore = true;
   const { error } = await db.from('tasks').update({ completed: task.completed }).eq('id', id);
+  setTimeout(() => { _realtimeIgnore = false; }, 100);
   if (error) {
     task.completed = prev;
     if (li) {
@@ -1525,7 +1530,9 @@ async function toggleImportant(id) {
     existingBadge.remove();
   }
 
+  _realtimeIgnore = true;
   const { error } = await db.from('tasks').update({ important: task.important }).eq('id', id);
+  setTimeout(() => { _realtimeIgnore = false; }, 100);
   if (error) {
     task.important = prev;
     if (li) {
@@ -1560,7 +1567,9 @@ async function deleteTask(id) {
   const removed = tasks.splice(idx, 1)[0];
 
   // Fire Supabase delete in background — rollback on failure
+  _realtimeIgnore = true;
   db.from('tasks').delete().eq('id', id).then(({ error: delErr }) => {
+    setTimeout(() => { _realtimeIgnore = false; }, 100);
     if (delErr) {
       tasks.splice(idx, 0, removed);
       render();
@@ -1821,7 +1830,28 @@ async function setReminder(id, remindAt) {
   const task = tasks.find(t => t.id === id);
   if (!task) return;
   task.remindAt = remindAt;
-  render();
+
+  // Selective DOM update — no full re-render
+  const li = taskList.querySelector(`[data-id="${id}"]`);
+  if (li) {
+    const btn = li.querySelector('.btn-remind');
+    if (btn) {
+      if (remindAt) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+    const meta = li.querySelector('.task-meta');
+    if (meta) {
+      const old = meta.querySelector('.badge-remind');
+      if (old) old.remove();
+      if (remindAt) {
+        const badge = document.createElement('span');
+        badge.className = 'badge-remind';
+        badge.textContent = '⏰ ' + formatRemindTime(remindAt);
+        meta.appendChild(badge);
+      }
+    }
+  }
+
   if (remindAt) {
     await ensureNotifPermission();
     scheduleNotification(id, task.text, remindAt);
@@ -1829,7 +1859,9 @@ async function setReminder(id, remindAt) {
     clearTimeout(notifTimers[id]);
     delete notifTimers[id];
   }
-  db.from('tasks').update({ remind_at: remindAt ? new Date(remindAt).toISOString() : null }).eq('id', id);
+  _realtimeIgnore = true;
+  db.from('tasks').update({ remind_at: remindAt ? new Date(remindAt).toISOString() : null }).eq('id', id)
+    .finally(() => setTimeout(() => { _realtimeIgnore = false; }, 100));
 }
 
 /* ============================================
@@ -1856,6 +1888,7 @@ async function setReminder(id, remindAt) {
   db.channel('tasks-realtime')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },
       (payload) => {
+        if (_realtimeIgnore) return;
         if (payload.eventType === 'INSERT') {
           const t = payload.new;
           if (tasks.find(x => x.id === t.id)) return;
@@ -1869,7 +1902,29 @@ async function setReminder(id, remindAt) {
           task.completed = t.completed;
           task.important = t.important;
           task.remindAt = t.remind_at ? new Date(t.remind_at).getTime() : null;
-          render();
+
+          // Selective DOM update — no full re-render
+          const li = taskList.querySelector(`[data-id="${t.id}"]`);
+          if (li) {
+            li.classList.toggle('completed', task.completed);
+            const cb = li.querySelector('.checkbox');
+            if (cb) cb.setAttribute('aria-checked', task.completed ? 'true' : 'false');
+            const btn = li.querySelector('.btn-important');
+            if (btn) {
+              if (task.important) { btn.classList.add('active'); btn.innerHTML = STAR_FILLED; btn.setAttribute('aria-label', '取消重要标记'); }
+              else { btn.classList.remove('active'); btn.innerHTML = STAR_OUTLINE; btn.setAttribute('aria-label', '标记为重要'); }
+            }
+            const meta = li.querySelector('.task-meta');
+            if (meta) {
+              const oldBadge = meta.querySelector('.badge-important');
+              if (task.important && !oldBadge) {
+                const b = document.createElement('span'); b.className = 'badge-important'; b.textContent = '重要'; meta.appendChild(b);
+              } else if (!task.important && oldBadge) {
+                oldBadge.remove();
+              }
+            }
+          }
+          updateFooter();
         } else if (payload.eventType === 'DELETE') {
           const id = payload.old.id;
           const li = taskList.querySelector(`[data-id="${id}"]`);
